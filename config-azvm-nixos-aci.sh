@@ -98,4 +98,4 @@ az container exec --name $CONTAINERNAME -g $RESOURCEGROUPNAME --exec-command "sh
 
 az container stop --name $CONTAINERNAME -g $RESOURCEGROUPNAME
 az container delete --name $CONTAINERNAME -g $RESOURCEGROUPNAME -y
-az storage share delete $SHARENAME --account-name $STORAGENAME --account-key $AZURE_STORAGE_KEY
+az storage share delete -n $SHARENAME --account-name $STORAGENAME --account-key $AZURE_STORAGE_KEY
