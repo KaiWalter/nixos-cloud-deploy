@@ -10,7 +10,7 @@ LOCATION=uksouth
 VMKEYNAME=azvm
 SHARENAME=nixos-config
 CONTAINERNAME=$VMNAME
-NIXCHANNEL=nixos-24.11
+NIXCHANNEL=nixos-24.05
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -98,3 +98,4 @@ az container exec --name $CONTAINERNAME -g $RESOURCEGROUPNAME --exec-command "sh
 
 az container stop --name $CONTAINERNAME -g $RESOURCEGROUPNAME
 az container delete --name $CONTAINERNAME -g $RESOURCEGROUPNAME -y
+az storage share delete $SHARENAME --account-name $STORAGENAME --account-key $AZURE_STORAGE_KEY

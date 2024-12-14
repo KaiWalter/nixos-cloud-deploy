@@ -12,7 +12,7 @@ GITHUBSSHKEYNAME=github
 SIZE=Standard_B4ms
 MODE=aci
 IMAGE=Canonical:ubuntu-24_04-lts:server:latest
-NIXCHANNEL=nixos-24.11
+NIXCHANNEL=nixos-24.05
 
 while [[ $# -gt 0 ]]; do
     case $1 in
