@@ -1,4 +1,8 @@
-## VM creation
+# Deploy cloud VMs with NixOS
+
+## Azure VM with nixos-anywhere
+
+Repository referenced and the process is described in [this post](https://community.ops.io/kaiwalter/inject-nixos-into-an-azure-vm-with-nixos-anywhere-and-azure-container-intances-4ke6).
 
 Script `create-azvm-nixos-anywhere.sh` drives the whole VM creation process. All general parameters to control the process, can be overwritten by command line arguments
 
