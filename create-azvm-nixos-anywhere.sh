@@ -124,7 +124,7 @@ if [[ ! $(ssh -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking=no' $V
     nixos)
       TEMPNIX=$(mktemp -d)
       trap 'rm -rf -- "$TEMPNIX"' EXIT
-      cp -r ./nix-config/* $TEMPNIX
+      cp -r ./nix-config/az/* $TEMPNIX
       sed -e "s|#PLACEHOLDER_PUBKEY|$VMPUBKEY|" \
         -e "s|#PLACEHOLDER_USERNAME|$VMUSERNAME|" \
         -e "s|#PLACEHOLDER_HOSTNAME|$VMNAME|" \

@@ -9,7 +9,7 @@ VMUSERNAME=johndoe
 REGION=eu-central-1
 VMKEYNAME=awsvm
 GITHUBSSHKEYNAME=github
-SIZE="t2.micro"
+SIZE="t2.medium"
 MODE=image
 NIXCHANNEL=nixos-24.05
 
@@ -89,47 +89,7 @@ fi
 AMI_ID=$(get_latest_nixos_ami $REGION)
 
 # Create cloud-init user data
-USER_DATA=$(cat <<EOF
-### https://nixos.org/channels/${NIXCHANNEL} nixos
-
-{ config, pkgs, ... }:
-{
-  imports = [ <nixpkgs/nixos/modules/virtualisation/amazon-image.nix> ];
-
-  ec2.hvm = true;
-
-  networking.hostName = "${VMNAME}";
-
-  environment.systemPackages = with pkgs; [
-    git
-    vim
-  ];
-
-  nix.settings = {
-    experimental-features = "nix-command flakes";
-  };
-
-  users.users."${VMUSERNAME}" = {
-    isNormalUser = true;
-    home = "/home/${VMUSERNAME}";
-    description = "temporary user to initiate final flake configuration";
-    openssh.authorizedKeys.keys = [
-        (builtins.readFile /root/.ssh/authorized_keys)
-    ];
-    extraGroups = ["wheel"];
-  };
-
-  security.sudo.wheelNeedsPassword = false;
-
-  services.openssh.enable = true;
-  services.openssh.permitRootLogin = "prohibit-password";
-
-  networking.firewall.allowedTCPPorts = [ 22 ];
-
-  system.stateVersion = "24.05";
-}
-EOF
-)
+USER_DATA=$(cat ./nix-config/aws/configuration.nix | sed -e "s|#PLACEHOLDER_HOSTNAME|$VMNAME|")
 
 INSTANCE_ID=$(aws ec2 run-instances \
     --image-id $AMI_ID \
