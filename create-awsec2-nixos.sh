@@ -112,9 +112,23 @@ FQDN=$(aws ec2 describe-instances \
     --output text \
     --region $REGION)
 
-echo $FQDN
-
 wait_for_ssh $FQDN
 cleanup_knownhosts $FQDN
 
-ssh -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking=no' root@$FQDN
+# finalize NixOS configuration
+ssh-keyscan $FQDN >> ~/.ssh/known_hosts
+
+ssh root@$FQDN 'bash -s' << EOF
+while ! grep -q "DO NOT DELETE THIS LINE" /etc/nixos/configuration.nix; do
+    echo "Waiting for cloud-init to finish..."
+    sleep 1
+done
+
+nixos-rebuild switch
+reboot &
+EOF
+
+echo "Waiting for reboot..."
+sleep 5
+wait_for_ssh $FQDN
+ssh root@$FQDN
