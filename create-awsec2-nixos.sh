@@ -86,25 +86,33 @@ if [ "$SG_ID" == "None" ]; then
     aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 22 --cidr 0.0.0.0/0 --region $REGION
 fi
 
-AMI_ID=$(get_latest_nixos_ami $REGION)
+for instance in $(get_resources_by_tag "Project" $VMNAME | grep "^i-")
+do
+  INSTANCE_ID=$instance
+done
 
-# Create cloud-init user data
-USER_DATA=$(cat ./nix-config/aws/configuration.nix | sed -e "s|#PLACEHOLDER_HOSTNAME|$VMNAME|")
+if [ -z $INSTANCE_ID ]; then 
 
-INSTANCE_ID=$(aws ec2 run-instances \
-    --image-id $AMI_ID \
-    --count 1 \
-    --instance-type $SIZE \
-    --key-name $VMKEYNAME \
-    --security-group-ids $SG_ID \
-    --user-data "$USER_DATA" \
-    --region $REGION \
-    --tag-specifications "ResourceType=instance,${COMMONTAGS}" \
-    --query 'Instances[0].InstanceId' \
-    --output text)
+  AMI_ID=$(get_latest_nixos_ami $REGION)
 
-# Wait for the instance to be running and SSH port to be available
-aws ec2 wait instance-running --instance-ids $INSTANCE_ID --region $REGION
+  # Create cloud-init user data
+  USER_DATA=$(cat ./nix-config/aws/configuration.nix | sed -e "s|#PLACEHOLDER_HOSTNAME|$VMNAME|")
+
+  INSTANCE_ID=$(aws ec2 run-instances \
+      --image-id $AMI_ID \
+      --count 1 \
+      --instance-type $SIZE \
+      --key-name $VMKEYNAME \
+      --security-group-ids $SG_ID \
+      --user-data "$USER_DATA" \
+      --region $REGION \
+      --tag-specifications "ResourceType=instance,${COMMONTAGS}" \
+      --query 'Instances[0].InstanceId' \
+      --output text)
+
+  # Wait for the instance to be running and SSH port to be available
+  aws ec2 wait instance-running --instance-ids $INSTANCE_ID --region $REGION
+fi
 
 FQDN=$(aws ec2 describe-instances \
     --instance-ids $INSTANCE_ID \
