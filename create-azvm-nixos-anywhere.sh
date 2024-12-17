@@ -4,7 +4,6 @@ set -e
 
 # process command line arguments
 VMNAME=az-nixos
-RESOURCEGROUPNAME=$VMNAME
 VMUSERNAME=johndoe
 LOCATION=uksouth
 VMKEYNAME=azvm
@@ -13,6 +12,7 @@ SIZE=Standard_B4ms
 MODE=aci
 IMAGE=Canonical:ubuntu-24_04-lts:server:latest
 NIXCHANNEL=nixos-24.05
+NIXCONFIGREPO=johndoe/nix-config
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -48,6 +48,10 @@ while [[ $# -gt 0 ]]; do
             NIXCHANNEL="$2"
             shift 2
             ;;
+        --nix-config-repo)
+            NIXCONFIGREPO="$2"
+            shift 2
+            ;;
         --vm-key-name)
             VMKEYNAME="$2"
             shift 2
@@ -62,6 +66,8 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+[ -z $RESOURCEGROUPNAME] && RESOURCEGROUPNAME=$VMNAME
 
 # obtain sensitive information
 . ./common.sh
@@ -172,5 +178,4 @@ ssh-keyscan -H github.com >> ~/.ssh/known_hosts
 '"
 
 echo "clone repos (USER)..."
-ssh $VMUSERNAME@$FQDN -T "git clone -v git@github.com:johndoe/nix-config.git ~/nix-config"
-ssh $VMUSERNAME@$FQDN -T "sudo nixos-rebuild switch --flake ~/nix-config#az-vm --impure"
+ssh $VMUSERNAME@$FQDN -T "git clone -v git@github.com:$NIXCONFIGREPO.git ~/nix-config"

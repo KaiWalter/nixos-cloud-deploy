@@ -1,6 +1,6 @@
 #! /bin/sh
 
-set -e
+set -ex
 
 # process command line arguments
 VMNAME=aws-nixos
@@ -27,10 +27,8 @@ for instance in $(get_resources_by_tag "Project" $VMNAME | grep "^i-")
 do
   echo terminating $instance
   aws ec2 terminate-instances --instance-ids $instance
+  aws ec2 wait instance-terminated --instance-ids $instance
 done
-
-# Wait for instances to terminate
-aws ec2 wait instance-terminated --instance-ids $(get_resources_by_tag "Project" $VMNAME | grep "^i-")
 
 # Delete Security Groups
 for sg in $(get_resources_by_tag "Project" $VMNAME | grep "^sg-")
@@ -51,6 +49,13 @@ for vpc in $(get_resources_by_tag "Project" $VMNAME | grep "^vpc-")
 do
   echo deleting $vpc
   aws ec2 delete-vpc --vpc-id $vpc
+done
+
+# Delete ACLs
+for acl in $(get_resources_by_tag "Project" $VMNAME | grep "^acl-")
+do
+  echo deleting $acl
+  aws ec2 delete-network-acl --network-act-id $acl
 done
 
 # Delete Key Pairs
