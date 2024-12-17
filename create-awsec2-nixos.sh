@@ -85,7 +85,13 @@ VMPUBKEY=$(get_public_key $VMKEYNAME)
 
 # create EC2 resources
 . ./aws-common.sh
-COMMONTAGS="Tags=[{Key=Project,Value=$VMNAME}]"
+COMMON_TAGS="Tags=[{Key=Project,Value=$VMNAME}]"
+SUBNET_TAGS="Tags=[{Key=Project,Value=$VMNAME},{Key=Name,Value=$VMNAME}]"
+SG_TAGS="Tags=[{Key=Project,Value=$VMNAME},{Key=Name,Value=$SGNAME}]"
+ACL_TAGS="Tags=[{Key=Project,Value=$VMNAME},{Key=Name,Value=$ACLNAME}]"
+IGW_TAGS="Tags=[{Key=Project,Value=$VMNAME},{Key=Name,Value=$VMNAME}]"
+RT_TAGS="Tags=[{Key=Project,Value=$VMNAME},{Key=Name,Value=$VMNAME}]"
+
 export AWS_PAGER="" 
 
 if ! aws ec2 describe-key-pairs --key-names $VMKEYNAME --region $REGION &>/dev/null; then
@@ -102,6 +108,8 @@ VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$VPCNAME" \
 if [ "$VPC_ID" == "None" ]; then
   VPC_ID=$(aws ec2 create-vpc --cidr-block $VPC_CIDR --region $REGION --query "Vpc.VpcId" --output text)
   aws ec2 create-tags --resources $VPC_ID --tags "Key=Name,Value=$VPCNAME" "Key=Project,Value=$VMNAME" --region $REGION
+  aws ec2 modify-vpc-attribute --vpc-id $VPC_ID --enable-dns-support '{"Value":true}'
+  aws ec2 modify-vpc-attribute --vpc-id $VPC_ID --enable-dns-hostnames '{"Value":true}'
 fi
 
 SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" --query "Subnets[0].SubnetId" --output text)
@@ -109,9 +117,30 @@ if [ "$SUBNET_ID" == "None" ]; then
   SUBNET_ID=$(aws ec2 create-subnet --cidr-block $SUBNET_CIDR \
     --vpc-id $VPC_ID \
     --region $REGION \
-    --tag-specifications "ResourceType=subnet,${COMMONTAGS}" \
+    --tag-specifications "ResourceType=subnet,${SUBNET_TAGS}" \
     --query "Subnet.SubnetId" \
     --output text)
+  aws ec2 modify-subnet-attribute --subnet-id $SUBNET_ID --map-public-ip-on-launch
+fi
+
+IGW_ID=$(aws ec2 describe-internet-gateways --filters "Name=tag:Project,Values=$VMNAME" --query "InternetGateways[0].InternetGatewayId" --output text)
+if [ "$IGW_ID" == "None" ]; then
+  IGW_ID=$(aws ec2 create-internet-gateway \
+    --tag-specifications "ResourceType=internet-gateway,${IGW_TAGS}" \
+    --query 'InternetGateway.InternetGatewayId' \
+    --output text)
+  aws ec2 attach-internet-gateway --vpc-id $VPC_ID --internet-gateway-id $IGW_ID
+fi
+
+ROUTE_TABLE_ID=$(aws ec2 describe-route-tables --filters "Name=tag:Project,Values=$VMNAME" --query "RouteTables[0].RouteTableId" --output text)
+if [ "$ROUTE_TABLE_ID" == "None" ]; then
+  ROUTE_TABLE_ID=$(aws ec2 create-route-table \
+    --vpc-id $VPC_ID \
+    --tag-specifications "ResourceType=route-table,${RT_TAGS}" \
+    --query 'RouteTable.RouteTableId' \
+    --output text)
+  aws ec2 create-route --route-table-id $ROUTE_TABLE_ID --destination-cidr-block 0.0.0.0/0 --gateway-id $IGW_ID
+  aws ec2 associate-route-table --subnet-id $SUBNET_ID --route-table-id $ROUTE_TABLE_ID
 fi
 
 SG_ID=$(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$VPC_ID" "Name=group-name,Values=$SGNAME" \
@@ -123,31 +152,37 @@ if [ "$SG_ID" == "None" ]; then
     --vpc-id $VPC_ID \
     --description "$VPC_ID $SGNAME" \
     --region $REGION \
-    --tag-specifications "ResourceType=security-group,${COMMONTAGS}" \
+    --tag-specifications "ResourceType=security-group,${SG_TAGS}" \
     --query 'GroupId' \
     --output text)
   aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 22 --cidr 0.0.0.0/0 --region $REGION
 fi
 
-ACL_ID=$(aws ec2 create-network-acl --vpc-id $VPC_ID \
+ACL_ID=$(aws ec2 describe-network-acls --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Project,Values=$VMNAME" \
   --region $REGION \
-  --tag-specifications "ResourceType=network-acl,${COMMONTAGS}" \
-  --output text \
-  --query 'NetworkAcl.NetworkAclId')
+  --query "NetworkAcls[0].NetworkAclId" \
+  --output text)
+if [ "$ACL_ID" == "None" ]; then
+  ACL_ID=$(aws ec2 create-network-acl --vpc-id $VPC_ID \
+    --region $REGION \
+    --tag-specifications "ResourceType=network-acl,${COMMON_TAGS}" \
+    --output text \
+    --query 'NetworkAcl.NetworkAclId')
+  aws ec2 create-network-acl-entry --network-acl-id $ACL_ID \
+    --rule-number 100 --protocol tcp --port-range From=22,To=22 --cidr-block 0.0.0.0/0 \
+    --rule-action allow --ingress
+  aws ec2 create-network-acl-entry --network-acl-id $ACL_ID \
+    --rule-number 100 --protocol tcp --port-range From=443,To=443 --cidr-block 0.0.0.0/0 \
+    --rule-action allow --egress
+  aws ec2 create-network-acl-entry --network-acl-id $ACL_ID \
+    --rule-number 101 --protocol tcp --port-range From=22,To=22 --cidr-block 0.0.0.0/0 \
+    --rule-action allow --egress
+fi
 
-echo "NetworkAcls[0].Associations[?SubnetId=='${SUBNET_ID}']"
 DEFAULT_ACL_ASSOCIATION_ID=$(aws ec2 describe-network-acls --query "NetworkAcls[0].Associations[?SubnetId=='${SUBNET_ID}'].NetworkAclAssociationId" --output text)
-echo $DEFAULT_ACL_ASSOCIATION_ID
 if [ -n "$DEFAULT_ACL_ASSOCIATION_ID" ]; then
   aws ec2 replace-network-acl-association --association-id $DEFAULT_ACL_ASSOCIATION_ID --network-acl-id $ACL_ID --debug
 fi
-
-echo "VPC ID: $VPC_ID"
-echo "Subnet ID: $SUBNET_ID"
-echo "Security Group ID: $SG_ID"
-echo "Network ACL ID: $ACL_ID"
-
-read -n 1 -p "check"
 
 for instance in $(get_running_instances_by_tag "Project" $VMNAME | grep "^i-")
 do
@@ -169,10 +204,11 @@ if [ -z $INSTANCE_ID ]; then
       --instance-type $SIZE \
       --key-name $VMKEYNAME \
       --subnet-id $SUBNET_ID \
+      --security-group-id $SG_ID \
       --block-device-mappings "DeviceName=/dev/xvda,Ebs={VolumeSize=$DISK_SIZE}" \
       --user-data "$USER_DATA" \
       --region $REGION \
-      --tag-specifications "ResourceType=instance,${COMMONTAGS}" \
+      --tag-specifications "ResourceType=instance,${COMMON_TAGS}" \
       --query 'Instances[0].InstanceId' \
       --output text)
 
@@ -231,12 +267,10 @@ Host github.com
   IdentityFile ~/.ssh/github
 
 EOF
-#
-# chmod 644 ~/.ssh/config
-# ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+
+chmod 644 ~/.ssh/config
+ssh-keyscan -H github.com >> ~/.ssh/known_hosts
 '"
 
-ssh $VMUSERNAME@$FQDN
-
 echo "clone repos (USER)..."
-# ssh $VMUSERNAME@$FQDN -T "git clone -v git@github.com:KaiWalter/nix-config.git ~/nix-config"
+ssh $VMUSERNAME@$FQDN -T "git clone -v git@github.com:$NIXCONFIGREPO.git ~/nix-config"

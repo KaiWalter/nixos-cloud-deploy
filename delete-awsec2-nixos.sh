@@ -1,6 +1,6 @@
 #! /bin/sh
 
-set -ex
+set -e
 
 # process command line arguments
 VMNAME=aws-nixos
@@ -44,18 +44,46 @@ do
   aws ec2 delete-subnet --subnet-id $subnet
 done
 
-# Delete VPCs
-for vpc in $(get_resources_by_tag "Project" $VMNAME | grep "^vpc-")
+# Delete Routing Tables
+for rt in $(get_resources_by_tag "Project" $VMNAME | grep "^rtb-")
 do
-  echo deleting $vpc
-  aws ec2 delete-vpc --vpc-id $vpc
+  echo deleting $rt
+  aws ec2 delete-route-table --route-table-id $rt
 done
 
 # Delete ACLs
 for acl in $(get_resources_by_tag "Project" $VMNAME | grep "^acl-")
 do
   echo deleting $acl
-  aws ec2 delete-network-acl --network-act-id $acl
+  aws ec2 delete-network-acl --network-acl-id $acl
+done
+
+# Delete VPCs
+for vpc_id in $(get_resources_by_tag "Project" $VMNAME | grep "^vpc-")
+do
+  # Detach Internet Gateways
+  igw_ids=$(aws ec2 describe-internet-gateways \
+    --filters "Name=attachment.vpc-id,Values=$vpc_id" \
+    --query 'InternetGateways[*].InternetGatewayId' \
+    --output text)
+  for igw_id in $igw_ids; do
+      echo "Detaching Internet Gateway $igw_id from VPC $vpc_id"
+      aws ec2 detach-internet-gateway --internet-gateway-id $igw_id --vpc-id $vpc_id
+      if [ $? -eq 0 ]; then
+          echo "Successfully detached Internet Gateway $igw_id"
+      else
+          echo "Failed to detach Internet Gateway $igw_id"
+      fi
+  done  
+  echo deleting $vpc_id
+  aws ec2 delete-vpc --vpc-id $vpc_id
+done
+
+# Delete Internet Gateways
+for igw in $(get_resources_by_tag "Project" $VMNAME | grep "^igw-")
+do
+  echo deleting $igw
+  aws ec2 delete-internet-gateway --internet-gateway-id $igw
 done
 
 # Delete Key Pairs
