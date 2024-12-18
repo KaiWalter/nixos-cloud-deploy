@@ -7,7 +7,7 @@ VM_NAME=aws-nixos
 VM_USERNAME=johndoe
 VM_KEYNAME=awsvm
 REGION=eu-central-1
-GITHUB_SSH_KEY_NAME=github
+GITHUB_KEYNAME=github
 SIZE="t2.medium"
 MODE=image
 NIX_CHANNEL=nixos-24.05
@@ -76,7 +76,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --github-key-name)
-            GITHUB_SSH_KEY_NAME="$2"
+            GITHUB_KEYNAME="$2"
             shift 2
             ;;
         *)
@@ -262,8 +262,8 @@ ssh $VM_USERNAME@$fqdn "sudo nix-channel --add https://nixos.org/channels/${NIX_
 
 echo "transfer VM and Git keys..."
 ssh $VM_USERNAME@$fqdn "mkdir -p ~/.ssh"
-get_private_key "$GITHUB_SSH_KEY_NAME" | ssh $VM_USERNAME@$fqdn -T 'cat > ~/.ssh/github'
-get_public_key "$GITHUB_SSH_KEY_NAME" | ssh $VM_USERNAME@$fqdn -T 'cat > ~/.ssh/github.pub'
+get_private_key "$GITHUB_KEYNAME" | ssh $VM_USERNAME@$fqdn -T 'cat > ~/.ssh/github'
+get_public_key "$GITHUB_KEYNAME" | ssh $VM_USERNAME@$fqdn -T 'cat > ~/.ssh/github.pub'
 get_public_key "$VM_KEYNAME" | ssh $VM_USERNAME@$fqdn -T 'cat > ~/.ssh/awsvm.pub'
 
 ssh $VM_USERNAME@$fqdn bash -c "'
