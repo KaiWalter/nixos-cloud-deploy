@@ -270,7 +270,7 @@ ssh-keyscan -H github.com >> ~/.ssh/known_hosts
 
 echo "clone repos and apply final configuration..."
 ssh $VMUSERNAME@$FQDN -T "git clone -v git@github.com:$NIXCONFIGREPO.git ~/nix-config"
-ssh $VMUSERNAME@$FQDN "nixos-rebuild switch --flake ~/nix-config#aws-vm --impure && reboot"
+ssh $VMUSERNAME@$FQDN "sudo nixos-rebuild switch --flake ~/nix-config#aws-vm --impure && sudo reboot"
 
 echo "Waiting for reboot..."
 sleep 5
