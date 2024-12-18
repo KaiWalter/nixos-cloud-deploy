@@ -15,9 +15,24 @@ cleanup_knownhosts () {
 
 wait_for_ssh () {
   echo "Waiting for SSH to become available..."
-  while ! nc -z $1 22; do
-      sleep 5
-  done
+  if [ -z $2 ]; then
+    while ! nc -z $1 22; do
+        echo "Failed to connect to $1. Retrying in 5 seconds..."
+        sleep 5
+    done
+  else
+    set +e
+    while true; do
+      ssh -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking=no' -o 'ConnectTimeout=5' "$2@$1" uname -a
+      if [ $? -eq 0 ]; then
+        break
+      else
+        echo "Failed to connect to $1. Retrying in 5 seconds..."
+        sleep 5
+      fi
+    done
+    set -e
+  fi
 }
 
 prepare_keystore () {

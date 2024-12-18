@@ -3,27 +3,26 @@
 set -e
 
 # process command line arguments
-VMNAME=az-nixos
-RESOURCEGROUPNAME=$VMNAME
-VMUSERNAME=johndoe
+VM_NAME=az-nixos
+VM_USERNAME=johndoe
 LOCATION=uksouth
-VMKEYNAME=azvm
-SHARENAME=nixos-config
-CONTAINERNAME=$VMNAME
-NIXCHANNEL=nixos-24.05
+VM_KEYNAME=azvm
+SHARE_NAME=nixos-config
+CONTAINER_NAME=$VM_NAME
+NIX_CHANNEL=nixos-24.05
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         -n|--vm-name)
-            VMNAME="$2"
+            VM_NAME="$2"
             shift 2
             ;;
         -g|--resource-group)
-            RESOURCEGROUPNAME="$2"
+            RESOURCE_GROUP_NAME="$2"
             shift 2
             ;;
         -u|--user-name)
-            VMUSERNAME="$2"
+            VM_USERNAME="$2"
             shift 2
             ;;
         -l|--location)
@@ -31,19 +30,19 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -c|--container-name)
-            CONTAINERNAME="$2"
+            CONTAINER_NAME="$2"
             shift 2
             ;;
         --nix-channel)
-            NIXCHANNEL="$2"
+            NIX_CHANNEL="$2"
             shift 2
             ;;
         --vm-key-name)
-            VMKEYNAME="$2"
+            VM_KEYNAME="$2"
             shift 2
             ;;
         -s|--share-name)
-            SHARENAME="$2"
+            SHARE_NAME="$2"
             ST
             shift 2
             ;;
@@ -54,48 +53,50 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+[ -z $RESOURCE_GROUP_NAME] && RESOURCE_GROUP_NAME=$VM_NAME
+
 # obtain sensitive information
 . ./common.sh
 prepare_keystore
-VMPUBKEY=$(get_public_key $VMKEYNAME)
-VMPRIVKEY=$(get_private_key $VMKEYNAME | tr "[:cntrl:]" "|")
+VM_PUB_KEY=$(get_public_key $VM_KEYNAME)
+VM_PRIV_KEY=$(get_private_key $VM_KEYNAME | tr "[:cntrl:]" "|")
 
 # parameters obtain sensitive information
-TEMPNIX=$(mktemp -d)
+tempnix=$(mktemp -d)
 trap 'rm -rf -- "$TEMPNIX"' EXIT
-cp -r ./nix-config/* $TEMPNIX
-sed -e "s|#PLACEHOLDER_PUBKEY|$VMPUBKEY|" \
-  -e "s|#PLACEHOLDER_USERNAME|$VMUSERNAME|" \
-  -e "s|#PLACEHOLDER_HOSTNAME|$VMNAME|" \
-  ./nix-config/configuration.nix > $TEMPNIX/configuration.nix
+cp -r ./nix-config/az/* $tempnix
+sed -e "s|#PLACEHOLDER_PUBKEY|$VM_PUB_KEY|" \
+  -e "s|#PLACEHOLDER_USERNAME|$VM_USERNAME|" \
+  -e "s|#PLACEHOLDER_HOSTNAME|$VM_NAME|" \
+  ./nix-config/configuration.nix > $tempnix/configuration.nix
 
-FQDN=$(az vm show --show-details -n $VMNAME -g $RESOURCEGROUPNAME --query fqdns -o tsv | cut -d "," -f 1)
-STORAGENAME=$(az storage account list -g $RESOURCEGROUPNAME --query "[?kind=='StorageV2']|[0].name" -o tsv)
+fqdn=$(az vm show --show-details -n $VM_NAME -g $RESOURCE_GROUP_NAME --query fqdns -o tsv | cut -d "," -f 1)
+storage_name=$(az storage account list -g $RESOURCE_GROUP_NAME --query "[?kind=='StorageV2']|[0].name" -o tsv)
 
-AZURE_STORAGE_KEY=`az storage account keys list -n $STORAGENAME -g $RESOURCEGROUPNAME --query "[0].value" -o tsv`
-if [[ $(az storage share exists -n $SHARENAME --account-name $STORAGENAME --account-key $AZURE_STORAGE_KEY -o tsv) == "False" ]]; then
-  az storage share create -n $SHARENAME --account-name $STORAGENAME --account-key $AZURE_STORAGE_KEY
+AZURE_STORAGE_KEY=`az storage account keys list -n $storage_name -g $RESOURCE_GROUP_NAME --query "[0].value" -o tsv`
+if [[ $(az storage share exists -n $SHARE_NAME --account-name $storage_name --account-key $AZURE_STORAGE_KEY -o tsv) == "False" ]]; then
+  az storage share create -n $SHARE_NAME --account-name $storage_name --account-key $AZURE_STORAGE_KEY
 fi
 
 # upload Nix configuration files
-for filename in $TEMPNIX/*; do
+for filename in $tempnix/*; do
   echo "uploading ${filename}";
-  az storage file upload -s $SHARENAME --account-name $STORAGENAME --account-key $AZURE_STORAGE_KEY \
+  az storage file upload -s $SHARE_NAME --account-name $storage_name --account-key $AZURE_STORAGE_KEY \
     --source $filename
 done
 
-az container create --name $CONTAINERNAME -g $RESOURCEGROUPNAME \
-    --image nixpkgs/nix:$NIXCHANNEL \
+az container create --name $CONTAINER_NAME -g $RESOURCE_GROUP_NAME \
+    --image nixpkgs/nix:$NIX_CHANNEL \
     --os-type Linux --cpu 1 --memory 2 \
-    --azure-file-volume-account-name $STORAGENAME \
+    --azure-file-volume-account-name $storage_name \
     --azure-file-volume-account-key $AZURE_STORAGE_KEY \
-    --azure-file-volume-share-name $SHARENAME \
+    --azure-file-volume-share-name $SHARE_NAME \
     --azure-file-volume-mount-path "/root/work" \
-    --secure-environment-variables NIX_PATH="nixpkgs=channel:$NIXCHANNEL" FQDN="$FQDN" VMKEY="$VMPRIVKEY" \
+    --secure-environment-variables NIX_PATH="nixpkgs=channel:$NIX_CHANNEL" FQDN="$fqdn" VMKEY="$VM_PRIV_KEY" \
     --command-line "tail -f /dev/null"
 
-az container exec --name $CONTAINERNAME -g $RESOURCEGROUPNAME --exec-command "sh /root/work/aci-run.sh"
+az container exec --name $CONTAINER_NAME -g $RESOURCE_GROUP_NAME --exec-command "sh /root/work/aci-run.sh"
 
-az container stop --name $CONTAINERNAME -g $RESOURCEGROUPNAME
-az container delete --name $CONTAINERNAME -g $RESOURCEGROUPNAME -y
-az storage share delete -n $SHARENAME --account-name $STORAGENAME --account-key $AZURE_STORAGE_KEY
+az container stop --name $CONTAINER_NAME -g $RESOURCE_GROUP_NAME
+az container delete --name $CONTAINER_NAME -g $RESOURCE_GROUP_NAME -y
+az storage share delete -n $SHARE_NAME --account-name $storage_name --account-key $AZURE_STORAGE_KEY
