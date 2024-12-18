@@ -179,3 +179,4 @@ ssh-keyscan -H github.com >> ~/.ssh/known_hosts
 
 echo "clone repos (USER)..."
 ssh $VMUSERNAME@$FQDN -T "git clone -v git@github.com:$NIXCONFIGREPO.git ~/nix-config"
+ssh $VMUSERNAME@$FQDN "nixos-rebuild switch --flake ~/nix-config#azvm --impure"

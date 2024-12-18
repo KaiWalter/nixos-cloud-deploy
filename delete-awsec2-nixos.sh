@@ -18,12 +18,15 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+PROJECT_NAME="$VMNAME"
+
 # delete EC2 resources
 . ./aws-common.sh
+
 export AWS_PAGER="" 
 
 # Delete Instances
-for instance in $(get_resources_by_tag "Project" $VMNAME | grep "^i-")
+for instance in $(get_resources_by_tag "Project" $PROJECT_NAME | grep "^i-")
 do
   echo terminating $instance
   aws ec2 terminate-instances --instance-ids $instance
@@ -31,35 +34,28 @@ do
 done
 
 # Delete Security Groups
-for sg in $(get_resources_by_tag "Project" $VMNAME | grep "^sg-")
+for sg in $(get_resources_by_tag "Project" $PROJECT_NAME | grep "^sg-")
 do
   echo deleting $sg
   aws ec2 delete-security-group --group-id $sg
 done
 
 # Delete Subnets
-for subnet in $(get_resources_by_tag "Project" $VMNAME | grep "^subnet-")
+for subnet in $(get_resources_by_tag "Project" $PROJECT_NAME | grep "^subnet-")
 do
   echo deleting $subnet
   aws ec2 delete-subnet --subnet-id $subnet
 done
 
-# Delete Routing Tables
-for rt in $(get_resources_by_tag "Project" $VMNAME | grep "^rtb-")
-do
-  echo deleting $rt
-  aws ec2 delete-route-table --route-table-id $rt
-done
-
 # Delete ACLs
-for acl in $(get_resources_by_tag "Project" $VMNAME | grep "^acl-")
+for acl in $(get_resources_by_tag "Project" $PROJECT_NAME | grep "^acl-")
 do
   echo deleting $acl
   aws ec2 delete-network-acl --network-acl-id $acl
 done
 
 # Delete VPCs
-for vpc_id in $(get_resources_by_tag "Project" $VMNAME | grep "^vpc-")
+for vpc_id in $(get_resources_by_tag "Project" $PROJECT_NAME | grep "^vpc-")
 do
   # Detach Internet Gateways
   igw_ids=$(aws ec2 describe-internet-gateways \
@@ -75,12 +71,33 @@ do
           echo "Failed to detach Internet Gateway $igw_id"
       fi
   done  
+  # # Detach Route Tables
+  # rbt_ids=$(aws ec2 describe-route-tables \
+  #   --filters "Name=vpc-id,Values=$vpc_id" \
+  #   --query 'RouteTables[].Associations[].RouteTableAssociationId' \
+  #   --output text)
+  # for rbt_id in $rbt_ids; do
+  #     echo "Disassociate Route Table $rbt_id from VPC $vpc_id"
+  #     aws ec2 disassociate-route-table --association-id $rbt_id 
+  #     if [ $? -eq 0 ]; then
+  #         echo "Successfully disassociated Route Table $rbt_id"
+  #     else
+  #         echo "Failed to disassociate Route Table $rbt_id"
+  #     fi
+  # done  
   echo deleting $vpc_id
   aws ec2 delete-vpc --vpc-id $vpc_id
 done
 
+# Delete Routing Tables
+for rtb in $(get_resources_by_tag "Project" $PROJECT_NAME | grep "^rtb-")
+do
+  echo deleting $rtb
+  aws ec2 delete-route-table --route-table-id $igw
+done
+
 # Delete Internet Gateways
-for igw in $(get_resources_by_tag "Project" $VMNAME | grep "^igw-")
+for igw in $(get_resources_by_tag "Project" $PROJECT_NAME | grep "^igw-")
 do
   echo deleting $igw
   aws ec2 delete-internet-gateway --internet-gateway-id $igw

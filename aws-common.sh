@@ -8,6 +8,14 @@ get_running_instances_by_tag() {
     --query "Reservations[*].Instances[*].InstanceId" --output text
 }
 
+define_tag() {
+  if [ -z $2 ]; then
+    echo "Tags=[{Key=Project,Value=$1}]"
+  else
+    echo "Tags=[{Key=Project,Value=$1},{Key=Name,Value=$2}]"
+  fi
+}
+
 # get the latest Nixos AMI ID
 # https://nixos.wiki/wiki/Install_NixOS_on_Amazon_EC2
 get_latest_nixos_ami() {

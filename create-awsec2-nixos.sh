@@ -74,9 +74,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# set defaults in case names are not defined
 [ -z $SGNAME] && SGNAME=$VMNAME
 [ -z $ACLNAME] && ACLNAME=$VMNAME
 [ -z $VPCNAME] && VPCNAME=$VMNAME
+PROJECT_NAME="$VMNAME"
 
 # obtain sensitive information
 . ./common.sh
@@ -85,12 +87,6 @@ VMPUBKEY=$(get_public_key $VMKEYNAME)
 
 # create EC2 resources
 . ./aws-common.sh
-COMMON_TAGS="Tags=[{Key=Project,Value=$VMNAME}]"
-SUBNET_TAGS="Tags=[{Key=Project,Value=$VMNAME},{Key=Name,Value=$VMNAME}]"
-SG_TAGS="Tags=[{Key=Project,Value=$VMNAME},{Key=Name,Value=$SGNAME}]"
-ACL_TAGS="Tags=[{Key=Project,Value=$VMNAME},{Key=Name,Value=$ACLNAME}]"
-IGW_TAGS="Tags=[{Key=Project,Value=$VMNAME},{Key=Name,Value=$VMNAME}]"
-RT_TAGS="Tags=[{Key=Project,Value=$VMNAME},{Key=Name,Value=$VMNAME}]"
 
 export AWS_PAGER="" 
 
@@ -98,7 +94,7 @@ if ! aws ec2 describe-key-pairs --key-names $VMKEYNAME --region $REGION &>/dev/n
   aws ec2 import-key-pair --key-name $VMKEYNAME \
     --public-key-material "$(echo $VMPUBKEY | base64)" \
     --region $REGION \
-    --tag-specifications "ResourceType=key-pair,${COMMONTAGS}"
+    --tag-specifications "ResourceType=key-pair,$(define_tag $PROJECT_NAME $VMKEYNAME)"
 fi
 
 VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$VPCNAME" \
@@ -117,7 +113,7 @@ if [ "$SUBNET_ID" == "None" ]; then
   SUBNET_ID=$(aws ec2 create-subnet --cidr-block $SUBNET_CIDR \
     --vpc-id $VPC_ID \
     --region $REGION \
-    --tag-specifications "ResourceType=subnet,${SUBNET_TAGS}" \
+    --tag-specifications "ResourceType=subnet,$(define_tag $PROJECT_NAME)" \
     --query "Subnet.SubnetId" \
     --output text)
   aws ec2 modify-subnet-attribute --subnet-id $SUBNET_ID --map-public-ip-on-launch
@@ -126,7 +122,7 @@ fi
 IGW_ID=$(aws ec2 describe-internet-gateways --filters "Name=tag:Project,Values=$VMNAME" --query "InternetGateways[0].InternetGatewayId" --output text)
 if [ "$IGW_ID" == "None" ]; then
   IGW_ID=$(aws ec2 create-internet-gateway \
-    --tag-specifications "ResourceType=internet-gateway,${IGW_TAGS}" \
+    --tag-specifications "ResourceType=internet-gateway,$(define_tag $PROJECT_NAME)" \
     --query 'InternetGateway.InternetGatewayId' \
     --output text)
   aws ec2 attach-internet-gateway --vpc-id $VPC_ID --internet-gateway-id $IGW_ID
@@ -136,7 +132,7 @@ ROUTE_TABLE_ID=$(aws ec2 describe-route-tables --filters "Name=tag:Project,Value
 if [ "$ROUTE_TABLE_ID" == "None" ]; then
   ROUTE_TABLE_ID=$(aws ec2 create-route-table \
     --vpc-id $VPC_ID \
-    --tag-specifications "ResourceType=route-table,${RT_TAGS}" \
+    --tag-specifications "ResourceType=route-table,$(define_tag $PROJECT_NAME)" \
     --query 'RouteTable.RouteTableId' \
     --output text)
   aws ec2 create-route --route-table-id $ROUTE_TABLE_ID --destination-cidr-block 0.0.0.0/0 --gateway-id $IGW_ID
@@ -152,7 +148,7 @@ if [ "$SG_ID" == "None" ]; then
     --vpc-id $VPC_ID \
     --description "$VPC_ID $SGNAME" \
     --region $REGION \
-    --tag-specifications "ResourceType=security-group,${SG_TAGS}" \
+    --tag-specifications "ResourceType=security-group,$(define_tag $PROJECT_NAME $SGNAME)" \
     --query 'GroupId' \
     --output text)
   aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 22 --cidr 0.0.0.0/0 --region $REGION
@@ -165,7 +161,7 @@ ACL_ID=$(aws ec2 describe-network-acls --filters "Name=vpc-id,Values=$VPC_ID" "N
 if [ "$ACL_ID" == "None" ]; then
   ACL_ID=$(aws ec2 create-network-acl --vpc-id $VPC_ID \
     --region $REGION \
-    --tag-specifications "ResourceType=network-acl,${COMMON_TAGS}" \
+    --tag-specifications "ResourceType=network-acl,$(define_tag $PROJECT_NAME $ACLNAME)" \
     --output text \
     --query 'NetworkAcl.NetworkAclId')
   aws ec2 create-network-acl-entry --network-acl-id $ACL_ID \
@@ -208,7 +204,7 @@ if [ -z $INSTANCE_ID ]; then
       --block-device-mappings "DeviceName=/dev/xvda,Ebs={VolumeSize=$DISK_SIZE}" \
       --user-data "$USER_DATA" \
       --region $REGION \
-      --tag-specifications "ResourceType=instance,${COMMON_TAGS}" \
+      --tag-specifications "ResourceType=instance,$(define_tag $PROJECT_NAME $VMNAME)" \
       --query 'Instances[0].InstanceId' \
       --output text)
 
@@ -272,5 +268,11 @@ chmod 644 ~/.ssh/config
 ssh-keyscan -H github.com >> ~/.ssh/known_hosts
 '"
 
-echo "clone repos (USER)..."
+echo "clone repos and apply final configuration..."
 ssh $VMUSERNAME@$FQDN -T "git clone -v git@github.com:$NIXCONFIGREPO.git ~/nix-config"
+ssh $VMUSERNAME@$FQDN "nixos-rebuild switch --flake ~/nix-config#aws-vm --impure && reboot"
+
+echo "Waiting for reboot..."
+sleep 5
+wait_for_ssh $FQDN $VMUSERNAME
+ssh $VMUSERNAME@$FQDN
