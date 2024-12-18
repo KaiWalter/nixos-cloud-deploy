@@ -99,6 +99,7 @@ VM_PUB_KEY=$(get_public_key $VM_KEYNAME)
 
 # create EC2 resources
 . ./aws-common.sh
+echo "Creating resources with tag $(define_tag $PROJECT_NAME)..."
 
 export AWS_PAGER="" 
 
