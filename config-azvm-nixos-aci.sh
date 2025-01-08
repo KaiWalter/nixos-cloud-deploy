@@ -53,7 +53,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[ -z $RESOURCE_GROUP_NAME] && RESOURCE_GROUP_NAME=$VM_NAME
+[ -z $RESOURCE_GROUP_NAME ] && RESOURCE_GROUP_NAME=$VM_NAME
 
 # obtain sensitive information
 . ./common.sh
@@ -68,7 +68,7 @@ cp -r ./nix-config/az/* $tempnix
 sed -e "s|#PLACEHOLDER_PUBKEY|$VM_PUB_KEY|" \
   -e "s|#PLACEHOLDER_USERNAME|$VM_USERNAME|" \
   -e "s|#PLACEHOLDER_HOSTNAME|$VM_NAME|" \
-  ./nix-config/configuration.nix > $tempnix/configuration.nix
+  ./nix-config/az/configuration.nix > $tempnix/configuration.nix
 
 fqdn=$(az vm show --show-details -n $VM_NAME -g $RESOURCE_GROUP_NAME --query fqdns -o tsv | cut -d "," -f 1)
 storage_name=$(az storage account list -g $RESOURCE_GROUP_NAME --query "[?kind=='StorageV2']|[0].name" -o tsv)

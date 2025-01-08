@@ -67,7 +67,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[ -z $RESOURCE_GROUP_NAME] && RESOURCE_GROUP_NAME=$VM_NAME
+[ -z $RESOURCE_GROUP_NAME ] && RESOURCE_GROUP_NAME=$VM_NAME
 
 # obtain sensitive information
 . ./common.sh
@@ -179,7 +179,7 @@ ssh-keyscan -H github.com >> ~/.ssh/known_hosts
 
 echo "clone repos (USER)..."
 ssh $VM_USERNAME@$fqdn -T "git clone -v git@github.com:$NIX_CONFIG_REPO.git ~/nix-config"
-ssh $VM_USERNAME@$fqdn "sudo nixos-rebuild switch --flake ~/nix-config#azvm --impure && sudo reboot"
+ssh $VM_USERNAME@$fqdn "sudo nixos-rebuild switch --flake ~/nix-config#az-vm --impure && sudo reboot"
 
 echo "Waiting for reboot..."
 sleep 5
