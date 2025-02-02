@@ -10,7 +10,7 @@ VM_KEYNAME=azvm
 GITHUB_KEYNAME=github
 SIZE=Standard_B4ms
 MODE=aci
-IMAGE=Canonical:ubuntu-24_04-lts:server:latest
+IMAGE=Canonical:ubuntu-24_04-lts:server:latest # or ARM64: Canonical:ubuntu-24_04-lts:server-arm64:latest
 NIX_CHANNEL=nixos-24.05
 NIX_CONFIG_REPO=johndoe/nix-config
 
@@ -129,13 +129,13 @@ if [[ ! $(ssh -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking=no' $V
       ;;
     nixos)
       tempnix=$(mktemp -d)
-      trap 'rm -rf -- "$TEMPNIX"' EXIT
+      trap 'rm -rf -- "$tempnix"' EXIT
       cp -r ./nix-config/az/* $tempnix
       sed -e "s|#PLACEHOLDER_PUBKEY|$VM_PUB_KEY|" \
         -e "s|#PLACEHOLDER_USERNAME|$VM_USERNAME|" \
         -e "s|#PLACEHOLDER_HOSTNAME|$VM_NAME|" \
-        ./nix-config/configuration.nix > $tempnix/configuration.nix
-        
+        ./nix-config/az/configuration.nix > $tempnix/configuration.nix
+
       nix run github:nix-community/nixos-anywhere -- --flake $tempnix#az-nixos --generate-hardware-config nixos-facter $tempnix/facter.json root@$fqdn
       ;;
     *) echo default
