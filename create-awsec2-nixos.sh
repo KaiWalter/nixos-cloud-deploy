@@ -1,4 +1,4 @@
-#! /bin/sh
+#! /usr/bin/env bash
 
 set -e
 
@@ -13,77 +13,77 @@ MODE=image
 NIX_CHANNEL=nixos-24.05
 NIX_CONFIG_REPO=johndoe/nix-config
 
-VPC_CIDR="10.0.0.0/16"  # VPC CIDR block
-SUBNET_CIDR="10.0.1.0/24"  # Subnet CIDR block
-DISK_SIZE=1024 # main disk size
+VPC_CIDR="10.0.0.0/16"    # VPC CIDR block
+SUBNET_CIDR="10.0.1.0/24" # Subnet CIDR block
+DISK_SIZE=1024            # main disk size
 
 while [[ $# -gt 0 ]]; do
-    case $1 in
-        -n|--vm-name)
-            VM_NAME="$2"
-            shift 2
-            ;;
-        -u|--user-name)
-            VM_USERNAME="$2"
-            shift 2
-            ;;
-        -r|--region)
-            REGION="$2"
-            shift 2
-            ;;
-        -s|--size)
-            SIZE="$2"
-            shift 2
-            ;;
-        -m|--mode)
-            MODE="$2"
-            shift 2
-            ;;
-        --nix-channel)
-            NIX_CHANNEL="$2"
-            shift 2
-            ;;
-        --nix-config-repo)
-            NIX_CONFIG_REPO="$2"
-            shift 2
-            ;;
-        --vm-key-name)
-            VM_KEYNAME="$2"
-            shift 2
-            ;;
-        --vpc-name)
-            VM_KEYNAME="$2"
-            shift 2
-            ;;
-        --vpc-cidr)
-            VPC_CIDR="$2"
-            shift 2
-            ;;
-        --security-group-name)
-            SG_NAME="$2"
-            shift 2
-            ;;
-        --acl-name)
-            ACL_NAME="$2"
-            shift 2
-            ;;
-        --subnet-cidr)
-            SUBNET_CIDR="$2"
-            shift 2
-            ;;
-        --disk-size)
-            DISK_SIZE="$2"
-            shift 2
-            ;;
-        --github-key-name)
-            GITHUB_KEYNAME="$2"
-            shift 2
-            ;;
-        *)
-            echo "Unknown option: $1"
-            exit 1
-            ;;
-    esac
+  case $1 in
+  -n | --vm-name)
+    VM_NAME="$2"
+    shift 2
+    ;;
+  -u | --user-name)
+    VM_USERNAME="$2"
+    shift 2
+    ;;
+  -r | --region)
+    REGION="$2"
+    shift 2
+    ;;
+  -s | --size)
+    SIZE="$2"
+    shift 2
+    ;;
+  -m | --mode)
+    MODE="$2"
+    shift 2
+    ;;
+  --nix-channel)
+    NIX_CHANNEL="$2"
+    shift 2
+    ;;
+  --nix-config-repo)
+    NIX_CONFIG_REPO="$2"
+    shift 2
+    ;;
+  --vm-key-name)
+    VM_KEYNAME="$2"
+    shift 2
+    ;;
+  --vpc-name)
+    VM_KEYNAME="$2"
+    shift 2
+    ;;
+  --vpc-cidr)
+    VPC_CIDR="$2"
+    shift 2
+    ;;
+  --security-group-name)
+    SG_NAME="$2"
+    shift 2
+    ;;
+  --acl-name)
+    ACL_NAME="$2"
+    shift 2
+    ;;
+  --subnet-cidr)
+    SUBNET_CIDR="$2"
+    shift 2
+    ;;
+  --disk-size)
+    DISK_SIZE="$2"
+    shift 2
+    ;;
+  --github-key-name)
+    GITHUB_KEYNAME="$2"
+    shift 2
+    ;;
+  *)
+    echo "Unknown option: $1"
+    exit 1
+    ;;
+  esac
 done
 
 # set defaults in case names are not defined
@@ -101,7 +101,7 @@ VM_PUB_KEY=$(get_public_key $VM_KEYNAME)
 . ./aws-common.sh
 echo "Creating resources with tag $(define_tag $PROJECT_NAME)..."
 
-export AWS_PAGER="" 
+export AWS_PAGER=""
 
 if ! aws ec2 describe-key-pairs --key-names $VM_KEYNAME --region $REGION &>/dev/null; then
   aws ec2 import-key-pair --key-name $VM_KEYNAME \
@@ -197,43 +197,42 @@ if [ -n "$default_acl_assoc_id" ]; then
   aws ec2 replace-network-acl-association --association-id $default_acl_assoc_id --network-acl-id $acl_id --debug
 fi
 
-for instance in $(get_running_instances_by_tag "Project" $VM_NAME | grep "^i-")
-do
+for instance in $(get_running_instances_by_tag "Project" $VM_NAME | grep "^i-"); do
   instance_id=$instance
 done
 
-if [ -z $instance_id ]; then 
+if [ -z $instance_id ]; then
 
   ami_id=$(get_latest_nixos_ami $REGION)
 
   # Create cloud-init user data
   user_data=$(cat ./nix-config/aws/configuration.nix | sed -e "s|#PLACEHOLDER_PUBKEY|$VM_PUB_KEY|" \
-        -e "s|#PLACEHOLDER_USERNAME|$VM_USERNAME|" \
-        -e "s|#PLACEHOLDER_HOSTNAME|$VM_NAME|")
+    -e "s|#PLACEHOLDER_USERNAME|$VM_USERNAME|" \
+    -e "s|#PLACEHOLDER_HOSTNAME|$VM_NAME|")
 
   instance_id=$(aws ec2 run-instances \
-      --image-id $ami_id \
-      --count 1 \
-      --instance-type $SIZE \
-      --key-name $VM_KEYNAME \
-      --subnet-id $subnet_id \
-      --security-group-id $sg_id \
-      --block-device-mappings "DeviceName=/dev/xvda,Ebs={VolumeSize=$DISK_SIZE}" \
-      --user-data "$user_data" \
-      --region $REGION \
-      --tag-specifications "ResourceType=instance,$(define_tag $PROJECT_NAME $VM_NAME)" \
-      --query 'Instances[0].InstanceId' \
-      --output text)
+    --image-id $ami_id \
+    --count 1 \
+    --instance-type $SIZE \
+    --key-name $VM_KEYNAME \
+    --subnet-id $subnet_id \
+    --security-group-id $sg_id \
+    --block-device-mappings "DeviceName=/dev/xvda,Ebs={VolumeSize=$DISK_SIZE}" \
+    --user-data "$user_data" \
+    --region $REGION \
+    --tag-specifications "ResourceType=instance,$(define_tag $PROJECT_NAME $VM_NAME)" \
+    --query 'Instances[0].InstanceId' \
+    --output text)
 
   # Wait for the instance to be running and SSH port to be available
   aws ec2 wait instance-running --instance-ids $instance_id --region $REGION
 fi
 
 fqdn=$(aws ec2 describe-instances \
-    --instance-ids $instance_id \
-    --query 'Reservations[0].Instances[0].PublicDnsName' \
-    --output text \
-    --region $REGION)
+  --instance-ids $instance_id \
+  --query 'Reservations[0].Instances[0].PublicDnsName' \
+  --output text \
+  --region $REGION)
 
 echo "FQDN: $fqdn"
 
@@ -241,9 +240,9 @@ wait_for_ssh $fqdn root
 cleanup_knownhosts $fqdn
 
 # finalize NixOS configuration
-ssh-keyscan $fqdn >> ~/.ssh/known_hosts
+ssh-keyscan $fqdn >>~/.ssh/known_hosts
 
-ssh root@$fqdn 'bash -s' << EOF
+ssh root@$fqdn 'bash -s' <<EOF
 while ! grep -q "DO NOT DELETE THIS LINE" /etc/nixos/configuration.nix; do
     echo "Waiting for cloud-init to finish..."
     sleep 1

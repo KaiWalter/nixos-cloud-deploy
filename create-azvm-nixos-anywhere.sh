@@ -1,4 +1,4 @@
-#! /bin/sh
+#! /usr/bin/env bash
 
 set -e
 
@@ -15,56 +15,56 @@ NIX_CHANNEL=nixos-24.05
 NIX_CONFIG_REPO=johndoe/nix-config
 
 while [[ $# -gt 0 ]]; do
-    case $1 in
-        -n|--vm-name)
-            VM_NAME="$2"
-            shift 2
-            ;;
-        -g|--resource-group)
-            RESOURCE_GROUP_NAME="$2"
-            shift 2
-            ;;
-        -u|--user-name)
-            VM_USERNAME="$2"
-            shift 2
-            ;;
-        -l|--location)
-            LOCATION="$2"
-            shift 2
-            ;;
-        -i|--image)
-            IMAGE="$2"
-            shift 2
-            ;;
-        -s|--size)
-            SIZE="$2"
-            shift 2
-            ;;
-        -m|--mode)
-            MODE="$2"
-            shift 2
-            ;;
-        --nix-channel)
-            NIX_CHANNEL="$2"
-            shift 2
-            ;;
-        --nix-config-repo)
-            NIX_CONFIG_REPO="$2"
-            shift 2
-            ;;
-        --vm-key-name)
-            VM_KEYNAME="$2"
-            shift 2
-            ;;
-        --github-key-name)
-            GITHUB_KEYNAME="$2"
-            shift 2
-            ;;
-        *)
-            echo "Unknown option: $1"
-            exit 1
-            ;;
-    esac
+  case $1 in
+  -n | --vm-name)
+    VM_NAME="$2"
+    shift 2
+    ;;
+  -g | --resource-group)
+    RESOURCE_GROUP_NAME="$2"
+    shift 2
+    ;;
+  -u | --user-name)
+    VM_USERNAME="$2"
+    shift 2
+    ;;
+  -l | --location)
+    LOCATION="$2"
+    shift 2
+    ;;
+  -i | --image)
+    IMAGE="$2"
+    shift 2
+    ;;
+  -s | --size)
+    SIZE="$2"
+    shift 2
+    ;;
+  -m | --mode)
+    MODE="$2"
+    shift 2
+    ;;
+  --nix-channel)
+    NIX_CHANNEL="$2"
+    shift 2
+    ;;
+  --nix-config-repo)
+    NIX_CONFIG_REPO="$2"
+    shift 2
+    ;;
+  --vm-key-name)
+    VM_KEYNAME="$2"
+    shift 2
+    ;;
+  --github-key-name)
+    GITHUB_KEYNAME="$2"
+    shift 2
+    ;;
+  *)
+    echo "Unknown option: $1"
+    exit 1
+    ;;
+  esac
 done
 
 [ -z $RESOURCE_GROUP_NAME ] && RESOURCE_GROUP_NAME=$VM_NAME
@@ -75,20 +75,20 @@ prepare_keystore
 VM_PUB_KEY=$(get_public_key $VM_KEYNAME)
 
 # create Azure resources
-if ! az group show --name $RESOURCE_GROUP_NAME &> /dev/null; then
+if ! az group show --name $RESOURCE_GROUP_NAME &>/dev/null; then
   az group create -n $RESOURCE_GROUP_NAME -l $LOCATION
 fi
 
 storage_name=$(az storage account list -g $RESOURCE_GROUP_NAME --query "[?kind=='StorageV2']|[0].name" -o tsv)
 if [[ -z $storage_name ]]; then
-  storage_name=`echo $VM_NAME$RANDOM | tr -cd '[a-z0-9]'`
+  storage_name=$(echo $VM_NAME$RANDOM | tr -cd '[a-z0-9]')
   az storage account create -n $storage_name -g $RESOURCE_GROUP_NAME \
     --sku Standard_LRS \
     --kind StorageV2 \
     --allow-blob-public-access false
 fi
 
-if ! az vm show -n $VM_NAME -g $RESOURCE_GROUP_NAME &> /dev/null; then
+if ! az vm show -n $VM_NAME -g $RESOURCE_GROUP_NAME &>/dev/null; then
   az vm create -n $VM_NAME -g $RESOURCE_GROUP_NAME \
     --image "$IMAGE" \
     --public-ip-sku Standard \
@@ -105,7 +105,7 @@ if ! az vm show -n $VM_NAME -g $RESOURCE_GROUP_NAME &> /dev/null; then
 fi
 
 # inject Nixos
-fqdn=`az vm show --show-details -n $VM_NAME -g $RESOURCE_GROUP_NAME --query fqdns -o tsv | cut -d "," -f 1`
+fqdn=$(az vm show --show-details -n $VM_NAME -g $RESOURCE_GROUP_NAME --query fqdns -o tsv | cut -d "," -f 1)
 
 wait_for_ssh $fqdn
 cleanup_knownhosts $fqdn
@@ -119,27 +119,28 @@ if [[ ! $(ssh -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking=no' $V
   ssh -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking=no' root@$fqdn uname -a
 
   case "$MODE" in
-    aci)
-      ./config-azvm-nixos-aci.sh --vm-name $VM_NAME \
-        --resource-group $RESOURCE_GROUP_NAME \
-        --user-name $VM_USERNAME \
-        --location $LOCATION \
-        --nix-channel $NIX_CHANNEL \
-        --vm-key-name $VM_KEYNAME
-      ;;
-    nixos)
-      tempnix=$(mktemp -d)
-      trap 'rm -rf -- "$tempnix"' EXIT
-      cp -r ./nix-config/az/* $tempnix
-      sed -e "s|#PLACEHOLDER_PUBKEY|$VM_PUB_KEY|" \
-        -e "s|#PLACEHOLDER_USERNAME|$VM_USERNAME|" \
-        -e "s|#PLACEHOLDER_HOSTNAME|$VM_NAME|" \
-        ./nix-config/az/configuration.nix > $tempnix/configuration.nix
+  aci)
+    ./config-azvm-nixos-aci.sh --vm-name $VM_NAME \
+      --resource-group $RESOURCE_GROUP_NAME \
+      --user-name $VM_USERNAME \
+      --location $LOCATION \
+      --nix-channel $NIX_CHANNEL \
+      --vm-key-name $VM_KEYNAME
+    ;;
+  nixos)
+    tempnix=$(mktemp -d)
+    trap 'rm -rf -- "$tempnix"' EXIT
+    cp -r ./nix-config/az/* $tempnix
+    sed -e "s|#PLACEHOLDER_PUBKEY|$VM_PUB_KEY|" \
+      -e "s|#PLACEHOLDER_USERNAME|$VM_USERNAME|" \
+      -e "s|#PLACEHOLDER_HOSTNAME|$VM_NAME|" \
+      ./nix-config/az/configuration.nix >$tempnix/configuration.nix
 
-      nix run github:nix-community/nixos-anywhere -- --flake $tempnix#az-nixos --generate-hardware-config nixos-facter $tempnix/facter.json root@$fqdn
-      ;;
-    *) echo default
-      ;;
+    nix run github:nix-community/nixos-anywhere -- --flake $tempnix#az-nixos --generate-hardware-config nixos-facter $tempnix/facter.json root@$fqdn
+    ;;
+  *)
+    echo default
+    ;;
   esac
 
   wait_for_ssh $fqdn
@@ -147,7 +148,7 @@ if [[ ! $(ssh -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking=no' $V
 fi
 
 # finalize NixOS configuration
-ssh-keyscan $fqdn >> ~/.ssh/known_hosts
+ssh-keyscan $fqdn >>~/.ssh/known_hosts
 
 echo "set Nix channel"
 ssh $VM_USERNAME@$fqdn "sudo nix-channel --add https://nixos.org/channels/${NIX_CHANNEL} nixos && sudo nix-channel --update"
