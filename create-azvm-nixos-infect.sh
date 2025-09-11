@@ -11,7 +11,6 @@
 # sdb       32G disk
 # └─sdb1    32G part /mnt
 
-
 set -e
 
 # process command line arguments
@@ -86,6 +85,8 @@ done
 prepare_keystore
 VM_PUB_KEY=$(get_public_key $VM_KEYNAME)
 
+INIT_FILE_CONTENT=`cat ./cloud-init-nixos-infect.yaml`
+
 # create Azure resources
 if ! az group show --name $RESOURCE_GROUP_NAME &>/dev/null; then
   az group create -n $RESOURCE_GROUP_NAME -l $LOCATION
@@ -110,16 +111,16 @@ if ! az vm show -n $VM_NAME -g $RESOURCE_GROUP_NAME &>/dev/null; then
     --os-disk-size-gb 1024 \
     --boot-diagnostics-storage $storage_name \
     --size $SIZE \
-    --security-type Standard
+    --security-type Standard \
+    --custom-data "$INIT_FILE_CONTENT"
 
   az vm auto-shutdown -n $VM_NAME -g $RESOURCE_GROUP_NAME \
     --time "22:00"
 fi
 
-# inject Nixos
 fqdn=$(az vm show --show-details -n $VM_NAME -g $RESOURCE_GROUP_NAME --query fqdns -o tsv | cut -d "," -f 1)
 
 wait_for_ssh $fqdn
 cleanup_knownhosts $fqdn
 
-ssh $VM_USERNAME@$fqdn
+ssh $VM_USERNAME@$fqdn tail -f /var/log/cloud-init-output.log
